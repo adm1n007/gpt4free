@@ -19,6 +19,16 @@ class QwenCode(OpenaiTemplate):
     client = QwenContentGenerator(QwenOAuth2Client())
 
     @classmethod
+    def get_models(cls, **kwargs):
+        if cls.live == 0:
+            cls.client.shared_manager.checkAndReloadIfNeeded()
+            creds = cls.client.shared_manager.getCurrentCredentials()
+            if creds:
+                cls.client.shared_manager.isTokenValid(creds)
+            cls.live += 1
+        return cls.models
+
+    @classmethod
     async def create_async_generator(
         cls,
         model: str,
@@ -40,9 +50,7 @@ class QwenCode(OpenaiTemplate):
                 if chunk != last_chunk:
                     yield chunk
                 last_chunk = chunk
-        except TokenManagerError as e:
-            raise MissingAuthError(f"QwenCode: No valid authentication available: {e}")
-        except MissingAuthError:
+        except TokenManagerError:
             await cls.client.shared_manager.getValidCredentials(cls.client.qwen_client, True)
             creds = await cls.client.get_valid_token()
             last_chunk = None

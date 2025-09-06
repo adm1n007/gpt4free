@@ -86,7 +86,7 @@ class SharedTokenManager(AuthFileMixin):
 
     async def getValidCredentials(self, qwen_client: IQwenOAuth2Client, force_refresh: bool = False):
         try:
-            await self.checkAndReloadIfNeeded()
+            self.checkAndReloadIfNeeded()
 
             if (
                 self.memory_cache["credentials"]
@@ -107,7 +107,7 @@ class SharedTokenManager(AuthFileMixin):
                 raise
             raise TokenManagerError(TokenError.REFRESH_FAILED, str(e), e)
 
-    async def checkAndReloadIfNeeded(self):
+    def checkAndReloadIfNeeded(self):
         now = int(time.time() * 1000)
         if now - self.memory_cache["last_check"] < CACHE_CHECK_INTERVAL_MS:
             return
@@ -118,7 +118,7 @@ class SharedTokenManager(AuthFileMixin):
             stat = file_path.stat()
             file_mod_time = int(stat.st_mtime * 1000)
             if file_mod_time > self.memory_cache["file_mod_time"]:
-                await self.reloadCredentialsFromFile()
+                self.reloadCredentialsFromFile()
                 self.memory_cache["file_mod_time"] = file_mod_time
         except FileNotFoundError:
             self.memory_cache["file_mod_time"] = 0
@@ -126,7 +126,7 @@ class SharedTokenManager(AuthFileMixin):
             self.memory_cache["credentials"] = None
             raise TokenManagerError(TokenError.FILE_ACCESS_ERROR, str(e), e)
 
-    async def reloadCredentialsFromFile(self):
+    def reloadCredentialsFromFile(self):
         file_path = self.getCredentialFilePath()
         try:
             with open(file_path, "r") as fs:
@@ -149,12 +149,13 @@ class SharedTokenManager(AuthFileMixin):
     async def performTokenRefresh(self, qwen_client: IQwenOAuth2Client, force_refresh: bool):
         lock_path = self.getLockFilePath()
         try:
+            qwen_client.setCredentials(self.memory_cache["credentials"])
             current_credentials = qwen_client.getCredentials()
             if not current_credentials.get("refresh_token"):
                 raise TokenManagerError(TokenError.NO_REFRESH_TOKEN, "No refresh token")
             await self.acquireLock(lock_path)
 
-            await self.checkAndReloadIfNeeded()
+            self.checkAndReloadIfNeeded()
 
             if (
                 not force_refresh
